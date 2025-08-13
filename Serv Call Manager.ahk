@@ -1,14 +1,14 @@
 #Requires AutoHotkey v2.0
-; ========================
+; ============================
 ; === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
-; ========================
+; ============================
 #SingleInstance Force
 SendMode "Input"
 SetWorkingDir A_ScriptDir
 
-; =================
+; ===============
 ; === РЕСУРСЫ ===
-; =================
+; ===============
 resources(name) {
     return A_ScriptDir "\resources\" name
 }
@@ -19,7 +19,7 @@ resources(name) {
 Initialize() {
     ; Загрузочный экран
     splashGui := CreateSplashGUI()
-    Sleep 1500
+    sleep 2300
     splashGui.Destroy()
     
     ; GUI элементов управления
@@ -45,9 +45,9 @@ Initialize() {
     infoGui.Show("x0 y" (A_ScreenHeight - infoH - offsetBottom))
 }
 
-; =====================
+; ==============================
 ; === ГРАФИЧЕСКИЕ ИНТЕРФЕЙСЫ ===
-; =====================
+; ==============================
 CreateSplashGUI() {
     splash := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
     splash.BackColor := "0x222222"
@@ -64,11 +64,11 @@ CreateSplashGUI() {
     progress := splash.Add("Progress", "w350 h8 Range0-1500", 0)
     startTime := A_TickCount
     
-    SetTimer(updateProgress, 100)
+    SetTimer(updateProgress, 1)
     updateProgress() {
         elapsed := A_TickCount - startTime
-        if (elapsed >= 500) {
-            progress.Value := 500
+        if (elapsed >= 1495) {
+            progress.Value := 1495
             SetTimer(, 0)
             return
         }
@@ -141,9 +141,9 @@ CreateAbbrevGUI() {
     return guiObj
 }
 
-; =====================
+; ======================
 ; === ОСНОВНОЙ КЛАСС ===
-; =====================
+; ======================
 class CallManager {
     static TIDCopy(bank) {
         A_Clipboard := ""
@@ -209,10 +209,10 @@ class CallManager {
     }
 }
 
-; =====================
+; =======================
 ; === ГОРЯЧИЕ КЛАВИШИ ===
-; =====================
-#SuspendExempt
+; =======================
+
 Initialize()
 
 ; Основные функции
@@ -224,11 +224,13 @@ F7:: CallManager.CommentGenerator()
 
 ; Управление скриптом
 F9:: Reload
-F10:: TogglePause()
 F11:: ToggleInfoDisplay()
 ^F9:: ToggleAbbrevDisplay()
+#SuspendExempt
+F10:: TogglePause()
+#SuspendExempt False
 
-; Текстовые сокращения (полностью восстановленные)
+; Текстовые сокращения
 ::верн::  { 
 SendText("Адрес верный. График: с `nОриентир: ")
 }
@@ -358,11 +360,10 @@ SendText("Номер не существует. Необходим доп. но�
 ::yt ceo:: {
 SendText("Номер не существует. Необходим доп. номер.")
 }
-#SuspendExempt False
 
-; =====================
+; ==========================
 ; === ФУНКЦИИ УПРАВЛЕНИЯ ===
-; =====================
+; ==========================
 TogglePause() {
     static paused := false
     paused := !paused
