@@ -1,305 +1,404 @@
 #Requires AutoHotkey v2.0
+; ========================
+; === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
+; ========================
+#SingleInstance Force
+SendMode "Input"
+SetWorkingDir A_ScriptDir
 
-; Загрузочный GUI
-myGui := Gui("+AlwaysOnTop -Caption -Border")  ; Окно будет поверх всех других
-imagepath := A_ScriptDir . "\resources\logo.png"
-
-if FileExist(imagePath) {
-    myGui.Add("Picture",, imagePath)
-} else {
-    myGui.Add("Text", "w300 h150 Center 0x200", "Serv Call Manager loading...")
+; =================
+; === РЕСУРСЫ ===
+; =================
+resources(name) {
+    return A_ScriptDir "\resources\" name
 }
 
-myGui.Title := "Image Overlay"
-myGui.Show()
-sleep(1500)
-myGui.Destroy()
+; =====================
+; === ИНИЦИАЛИЗАЦИЯ ===
+; =====================
+Initialize() {
+    ; Загрузочный экран
+    splashGui := CreateSplashGUI()
+    Sleep 1500
+    splashGui.Destroy()
+    
+    ; GUI элементов управления
+    global pauseGui := CreatePauseGUI()
+    global infoGui := CreateInfoGUI()
+    global abbrevGui := CreateAbbrevGUI()
+    
+    ; Позиционирование GUI
+    global offsetBottom := 40 ; Отступ от нижнего края
 
-; GUI для паузы
-pauseGui := Gui("+AlwaysOnTop -Caption -Border")
-pauseGui.BackColor := "EEEEEE"
-pauseGui.SetFont("s10", "Arial")
-pauseGui.Add("Text", "w300", "Скрипт на паузе")
+    infoGui.Show("Hide")
+    infoGui.GetPos(,,, &iH)
+    global infoH := iH
 
-; GUI для хоткеев
-infoGui := Gui("+AlwaysOnTop -Caption -Border")
-infoGui.BackColor := "EEEEEE"
-infoGui.SetFont("s10", "Arial")
-infoGui.Add("Text", "w300", "
-(Join`n
-    F6 - Сгенерировать номер ВТБ
-    F8 - Сгенерировать номер АБ
-    ----
-    F7 - Сгенерировать комментарий 
-    Ctrl + F7 - Комментарий - Одиночный звонок
-    Ctrl + F6 - Письмо для приостановки
-    ---
-    F9 - Перезагрузить программу
-    Ctrl + F9 - Список сокращений
-    F10 - Пауза программы
-    F11 - Скрыть подсказку
-)")
+    abbrevGui.Show("Hide")
+    abbrevGui.GetPos(,,, &aH)
+    global abbrevH := aH
 
-; GUI для аббревиатур
-abbrevGui := Gui("+AlwaysOnTop -Caption -Border")
-abbrevGui.BackColor := "EEEEEE"
-abbrevGui.SetFont("s10", "Arial")
-abbrevGui.Add("Text", "w350", "
-(
-    [верн, согл]: Адрес верный. График: с <...> Ориентир:
-    [24-7, 247, кругл]: круглосуточно
-    [нд]: Не удалось связаться с клиентом.
-    [ао]: Автоответчик.
-    [сброс, сбр]: Клиент сбросил звонок.
-    [тишина, тихо, молчат]: Тишина в трубке.
-    [нетсп, нк]: Контактное лицо не принадлежит ТСП.
-    [не ак, не акт]: Со слов клиента заявка не актуальна.
-    [раб вост]: Работоспособность терминала восстановлена. 
-    [по доп]: По доп. номеру:
-    [по осн]: По основому номеру:
-    [не сущ]: Номер не существует. Необходим доп. номер.
-    [неверн]: Адрес не верный.
+    pauseGui.Show("Hide")
+    pauseGui.GetPos(,,, &pH)
+    global pauseH := pH
+    
+    infoGui.Show("x0 y" (A_ScreenHeight - infoH - offsetBottom))
+}
 
-    Ctrl+F9 - назад
-)")
-
-global infoGuiPos := 230
-global abbrevGuiPos := 303
-
-infoGui.Show("x0 y" A_ScreenHeight-infoGuiPos)
-
-class CallManager{
-
-    TIDCopy(bank){
-        A_Clipboard := ""
-        Loop{
-            ToolTip("[" bank "]: Скопируйте ID терминала")
-            SetTimer(() => ToolTip(), -2000)
-
-            if(A_Clipboard){
-                return terminal := SubStr(A_Clipboard, -6)
-            }
-        }
+; =====================
+; === ГРАФИЧЕСКИЕ ИНТЕРФЕЙСЫ ===
+; =====================
+CreateSplashGUI() {
+    splash := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    splash.BackColor := "0x222222"
+    splash.MarginX := 0, splash.MarginY := 0
+    
+    imagePath := resources("logo.png")
+    if FileExist(imagePath) {
+        pic := splash.Add("Picture", "w350 h350", imagePath)
+        pic.OnEvent("Click", (*) => ExitApp())
+    } else {
+        splash.Add("Text", "w350 h350 Center 0x200 cWhite", "Serv Call Manager")
     }
-
-    REQCopy(bank){
-        A_Clipboard := ""
-        Loop{
-            ToolTip("[" bank "]: Скопируйте ID заявки")
-            SetTimer(() => ToolTip(), -2000)
-            if(A_Clipboard){
-                return req := SubStr(A_Clipboard, -4)
-            }
-        }
-    }
-
-    ActivateInfitity(){
-        if(WinExist("ahk_exe Cx.Client.exe")){
-            WinActivate("ahk_exe Cx.Client.exe")
-            Send("^v")
-            Send("{Enter}")
-        }
-        else{
-            MsgBox("Infinity не запущен! Пожалуйста, запустите Infinity чтобы работала функция автоматических звонков.", "Не обнаружен Infinity Call-center")
+    
+    progress := splash.Add("Progress", "w350 h8 Range0-1500", 0)
+    startTime := A_TickCount
+    
+    SetTimer(updateProgress, 100)
+    updateProgress() {
+        elapsed := A_TickCount - startTime
+        if (elapsed >= 500) {
+            progress.Value := 500
+            SetTimer(, 0)
             return
         }
+        progress.Value := elapsed
     }
+    
+    splash.Show("Center")
+    splash.Title := "Загрузка"
+    return splash
+}
 
-    NumberGenerator(){
-        bank := "ВТБ"
-        terminal := this.TIDCopy(bank)
-        req := this.REQCopy(bank)
+CreatePauseGUI() {
+    guiObj := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    guiObj.BackColor := "0x2C2C2C"
+    guiObj.SetFont("s12 cWhite Bold", "Segoe UI")
+    guiObj.Add("Text", "w200 h50 Center 0x200", "⏸ Скрипт на паузе")
+    return guiObj
+}
 
-        A_Clipboard := "88007007321,9," terminal "," req ",1"
-        ToolTip("[" bank "]: Номер успешно сгенерирован (" A_Clipboard ")")
-        this.ActivateInfitity()
-    }
+CreateInfoGUI() {
+    guiObj := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    guiObj.BackColor := "0x1E1E1E"
+    guiObj.SetFont("s10 cCCCCCC", "Consolas")
+    guiObj.MarginX := 10, guiObj.MarginY := 10
+    
+    text := "
+    (LTrim
+        [F6]  Генератор номера ВТБ
+        [F8]  Генератор номера АБ
+        [F7]  Шаблон комментария
+        [F9]  Перезапуск скрипта
+        [F10] Пауза/возобновить
+        [F11] Скрыть/показать подсказки
+        
+        [Ctrl+F6] Письмо приостановки
+        [Ctrl+F7] Комментарий (одиночный)
+        [Ctrl+F9] Список сокращений
+    )"
+    
+    guiObj.Add("Text", "w280 h150", text)
+    return guiObj
+}
 
-    ABNumberGenerator(){
-        bank := "АБ"
-        terminal := this.TIDCopy(bank)
-        req := this.REQCopy(bank)
+CreateAbbrevGUI() {
+    guiObj := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    guiObj.BackColor := "0x1E1E1E"
+    guiObj.SetFont("s9 cCCCCCC", "Consolas")
+    guiObj.MarginX := 10, guiObj.MarginY := 10
+    
+    text := "
+    (LTrim
+        [верн, согл]            Адрес верный + график
+        [нд]                    Не дозвон
+        [ао]                    Автоответчик
+        [сброс, сбр]            Сброс вызова
+        [тишина, тихо, молчат]  Тишина в трубке
+        [нетсп, нк]             Не принадлежит ТСП
+        [не ак, не акт]         Заявка не актуальна
+        [раб вост]              Терминал восстановлен
+        [по доп]                По доп. номеру
+        [по осн]                По основному номеру
+        [неверн]                Адрес неверный
+        [247, кругл]            Круглосуточно
+        [не сущ]                Номер не существует
+        
+        [Ctrl+F9] ◀ Назад
+    )"
+    
+    guiObj.Add("Text", "w320 h210", text)
+    return guiObj
+}
 
-        A_Clipboard := "88007004891,9," terminal "," req ",1"
-        ToolTip("[" bank "]: Номер успешно сгенерирован (" A_Clipboard ")")
-        this.ActivateInfitity()
-    }
-
-    CommentGenerator(){
-        CurrentDate := FormatTime(, "dd.MM")
-        CurrentTime := FormatTime(, "HH:mm")
-
-        TimePlus1 := AddMinutes(CurrentTime, 30)
-        TimePlus2 := AddMinutes(CurrentTime, 60)
-
-        Output := CurrentDate "`n    " CurrentTime "`n    " TimePlus1 "`n    " TimePlus2
-        SendInput(Output)
-
-        ; Функция для добавления минут к времени в формате HH:mm
-        AddMinutes(Time, MinutesToAdd) {
-        ; Разбираем время на часы и минуты
-        TimeParts := StrSplit(Time, ":")
-        Hours := Integer(TimeParts[1])
-        Minutes := Integer(TimeParts[2])
-
-        ; Преобразуем в общее количество минут
-        TotalMinutes := Hours * 60 + Minutes + MinutesToAdd
-
-        ; Вычисляем новые часы и минуты (с учетом перехода через 24 часа)
-        NewHours := Mod(Floor(TotalMinutes / 60), 24)
-        NewMinutes := Mod(TotalMinutes, 60)
-
-        ; Форматируем с ведущими нулями
-        NewHours := Format("{:02}", NewHours)
-        NewMinutes := Format("{:02}", NewMinutes)
-
-        return NewHours ":" NewMinutes
+; =====================
+; === ОСНОВНОЙ КЛАСС ===
+; =====================
+class CallManager {
+    static TIDCopy(bank) {
+        A_Clipboard := ""
+        Loop {
+            ToolTip("[" bank "]: Скопируйте ID терминала")
+            SetTimer(() => ToolTip(), -2000)
+            if A_Clipboard
+                return SubStr(A_Clipboard, -6)
         }
     }
 
-    SingleCommentGenerator(){
-        CurrentDate := FormatTime(, "dd.MM")
-        CurrentTime := FormatTime(, "HH:mm")
-        Output := CurrentDate ": " CurrentTime " - " 
-        SendInput(Output)
+    static REQCopy(bank) {
+        A_Clipboard := ""
+        Loop {
+            ToolTip("[" bank "]: Скопируйте ID заявки")
+            SetTimer(() => ToolTip(), -2000)
+            if A_Clipboard
+                return SubStr(A_Clipboard, -4)
+        }
+    }
+
+    static ActivateInfinity() {
+        if WinExist("ahk_exe Cx.Client.exe") {
+            WinActivate
+            Send "^v{Enter}"
+        } else {
+            MsgBox("Infinity не запущен!`nЗапустите программу для работы функции", "Ошибка", "Icon!")
+        }
+    }
+
+    static NumberGenerator() {
+        bank := "ВТБ"
+        tid := this.TIDCopy(bank)
+        req := this.REQCopy(bank)
+        A_Clipboard := "88007007321,9," tid "," req ",1"
+        this.ActivateInfinity()
+        ToolTip("[" bank "]: Номер сгенерирован", , 2)
+        SetTimer(() => ToolTip(), -2000)
+    }
+
+    static ABNumberGenerator() {
+        bank := "АБ"
+        tid := this.TIDCopy(bank)
+        req := this.REQCopy(bank)
+        A_Clipboard := "88007004891,9," tid "," req ",1"
+        this.ActivateInfinity()
+        ToolTip("[" bank "]: Номер сгенерирован", , 2)
+        SetTimer(() => ToolTip(), -2000)
+    }
+
+    static CommentGenerator() {
+        now := A_Now
+        time1 := DateAdd(now, 30, "Minutes")
+        time2 := DateAdd(now, 60, "Minutes")
+        
+        SendInput FormatTime(now, "dd.MM`n    HH:mm`n    ")
+        SendInput FormatTime(time1, "HH:mm`n    ")
+        SendInput FormatTime(time2, "HH:mm")
+    }
+
+    static SingleCommentGenerator() {
+        SendInput FormatTime(, "dd.MM: HH:mm - ")
     }
 }
 
-; Сокращения
+; =====================
+; === ГОРЯЧИЕ КЛАВИШИ ===
+; =====================
+#SuspendExempt
+Initialize()
 
-F6::{
-    manager := CallManager()
-    manager.NumberGenerator()
-}
+; Основные функции
+F6:: CallManager.NumberGenerator()
+F8:: CallManager.ABNumberGenerator()
+F7:: CallManager.CommentGenerator()
+^F7:: CallManager.SingleCommentGenerator()
+^F6:: Run(resources("letter.msg"))
 
-^F6::{
-    letterpath := A_ScriptDir . "\resources\letter.msg"
-    Run(letterpath)
-}
-
-F7::{
-    manager := CallManager()
-    manager.CommentGenerator()
-}
-
-^F7::{
-    manager := CallManager()
-    manager.SingleCommentGenerator()
-}
-
-F8::{
-    manager := CallManager()
-    manager.ABNumberGenerator()
-}
-
-
-::верн:: {
-    Send("Адрес верный. График: с `nОриентир: ")
-}
-::согл:: {
-    Send("Адрес верный. График: с `nОриентир: ")
-}
-::dthy:: {
-    Send("Адрес верный. График: с `nОриентир: ")
-}
-::cjuk:: {
-    Send("Адрес верный. График: с `nОриентир: ")
-}
-
-::неверн:: {
-    Send("Адрес не верный. Фактический адрес . График: с `nОриентир: ")
-}
-::ytdthy:: {
-    Send("Адрес не верный. Фактический адрес . График: с `nОриентир: ")
-}
-
-::247::круглосуточно
-::кругл::круглосуточно
-::rheuk::круглосуточно
-
-::нд::Не удалось связаться с клиентом.
-::yl::Не удалось связаться с клиентом.
-
-::ао::Не удалось связаться с клиентом: Автоответчик.
-::fj::Не удалось связаться с клиентом: Автоответчик.
-
-::сброс::Не удалось связаться с клиентом: Клиент сбросил звонок.
-::c,hjc::Не удалось связаться с клиентом: Клиент сбросил звонок.
-::сбр::Не удалось связаться с клиентом: Клиент сбросил звонок.
-::c,h::Не удалось связаться с клиентом: Клиент сбросил звонок.
-
-::тишина::Не удалось связаться с клиентом: Тишина в трубке.
-::тихо::Не удалось связаться с клиентом: Тишина в трубке.
-::молчат::Не удалось связаться с клиентом: Тишина в трубке.
-::nbibyf::Не удалось связаться с клиентом: Тишина в трубке.
-::nb[j::Не удалось связаться с клиентом: Тишина в трубке.
-::vjkxfn::Не удалось связаться с клиентом: Тишина в трубке.
-
-::нетсп::Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.
-::нк::Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.
-::ytncg::Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.
-::yr::Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.
-
-::по доп::По доп. номеру: 
-::gj ljg::По доп. номеру: 
-
-::по осн::По основому номеру: 
-::gj jcy::По основому номеру: 
-
-::не ак::Со слов клиента заявка не актуальна.
-::не акт::Со слов клиента заявка не актуальна.
-::yt fr::Со слов клиента заявка не актуальна.
-::yt frn::Со слов клиента заявка не актуальна.
-
-::раб вост::Работоспособность терминала восстановлена.
-::hf, djcn::Работоспособность терминала восстановлена.
-
-::не сущ::Номер не существует. Необходим доп. номер.
-::yt ceo::Номер не существует. Необходим доп. номер.
-
-; Обработчик для Ctrl+F9
-#SuspendExempt true
-^F9::{
-    static showAbbreviations := false
-    
-    if (showAbbreviations) {
-        abbrevGui.Hide()
-        infoGui.Show("x0 y" A_ScreenHeight - infoGuiPos)
-    } else {
-        infoGui.Hide()
-        abbrevGui.Show("x0 y" A_ScreenHeight - abbrevGuiPos)
-    }
-    
-    showAbbreviations := !showAbbreviations
-}
-
+; Управление скриптом
 F9:: Reload
+F10:: TogglePause()
+F11:: ToggleInfoDisplay()
+^F9:: ToggleAbbrevDisplay()
 
-F10::
-{
-    if(A_IsSuspended){
-        Suspend(0)
-        infoGui.Show("x0 y" A_ScreenHeight - infoGuiPos)
-        pauseGui.Hide()
-    }
-    else{
-        Suspend(1)
+; Текстовые сокращения (полностью восстановленные)
+::верн::  { 
+SendText("Адрес верный. График: с `nОриентир: ")
+}
+::dthy::  { 
+SendText("Адрес верный. График: с `nОриентир: ")
+}
+::согл::  { 
+SendText("Адрес верный. График: с `nОриентир: ")
+}
+::cjuk::  { 
+SendText("Адрес верный. График: с `nОриентир: ")
+}
+
+::неверн::{ 
+SendText("Адрес не верный. Фактический адрес . График: с `nОриентир: ")
+}
+::ytdthy::{ 
+SendText("Адрес не верный. Фактический адрес . График: с `nОриентир: ")
+}
+
+::247::   { 
+SendText("круглосуточно")
+}
+::кругл:: { 
+SendText("круглосуточно")
+}
+::rheuk:: { 
+SendText("круглосуточно")
+}
+
+::нд::    { 
+SendText("Не удалось связаться с клиентом.")
+}
+::yl::    { 
+SendText("Не удалось связаться с клиентом.")
+}
+
+::ао::    {
+SendText("Не удалось связаться с клиентом: Автоответчик.")
+}
+::fj::    {
+SendText("Не удалось связаться с клиентом: Автоответчик.")
+}
+
+::сброс:: {
+SendText("Не удалось связаться с клиентом: Клиент сбросил звонок.")
+}
+::c,hjc:: {
+SendText("Не удалось связаться с клиентом: Клиент сбросил звонок.")
+}
+::сбр::   {
+SendText("Не удалось связаться с клиентом: Клиент сбросил звонок.")
+}
+::c,h::   {
+SendText("Не удалось связаться с клиентом: Клиент сбросил звонок.")
+}
+
+::тишина::{
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+::тихо::  {
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+::молчат::{
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+::nbibyf::{
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+::nb[j::  {
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+::vjkxfn::{
+SendText("Не удалось связаться с клиентом: Тишина в трубке.")
+}
+
+::нетсп:: {
+SendText("Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.")
+}
+::нк::    {
+SendText("Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.")
+}
+::ytncg:: {
+SendText("Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.")
+}
+::yr::    {
+SendText("Контактное лицо не принадлежит ТСП. Просьба предоставить доп. контакт.")
+}
+
+::по доп::{
+SendText("По доп. номеру: ")
+}
+::gj ljg::{
+SendText("По доп. номеру: ")
+}
+
+::по осн::{
+SendText("По основому номеру: ")
+}
+::gj jcy::{
+SendText("По основому номеру: ")
+}
+
+::не ак:: {
+SendText("Со слов клиента заявка не актуальна.")
+}
+::не акт::{
+SendText("Со слов клиента заявка не актуальна.")
+}
+::yt fr:: {
+SendText("Со слов клиента заявка не актуальна.")
+}
+::yt frn::{
+SendText("Со слов клиента заявка не актуальна.")
+}
+
+::раб вост::{
+SendText("Работоспособность терминала восстановлена.")
+}
+::hf, djcn::{
+SendText("Работоспособность терминала восстановлена.")
+}
+
+::не сущ:: {
+SendText("Номер не существует. Необходим доп. номер.")
+}
+::yt ceo:: {
+SendText("Номер не существует. Необходим доп. номер.")
+}
+#SuspendExempt False
+
+; =====================
+; === ФУНКЦИИ УПРАВЛЕНИЯ ===
+; =====================
+TogglePause() {
+    static paused := false
+    paused := !paused
+    
+    if paused {
+        Suspend 1
         infoGui.Hide()
         abbrevGui.Hide()
-        pauseGui.Show("x0 y" A_ScreenHeight - 75)
+        pauseGui.Show("x0 y" (A_ScreenHeight - pauseH - offsetBottom))
+    } else {
+        Suspend 0
+        pauseGui.Hide()
+        infoGui.Show("x0 y" (A_ScreenHeight - infoH - offsetBottom))
     }
 }
 
-F11::{
-    static showHint := false
-    
-    if (showHint) {
-        infoGui.Show("x0 y" A_ScreenHeight - infoGuiPos)
+ToggleInfoDisplay() {
+    static visible := true
+    visible := !visible
+    if visible {
+        infoGui.Show("x0 y" (A_ScreenHeight - infoH - offsetBottom))
     } else {
         infoGui.Hide()
         abbrevGui.Hide()
     }
-    
-    showHint := !showHint
 }
-#SuspendExempt false
+
+ToggleAbbrevDisplay() {
+    static abbrevVisible := false
+    abbrevVisible := !abbrevVisible
+    
+    if abbrevVisible {
+        infoGui.Hide()
+        abbrevGui.Show("x0 y" (A_ScreenHeight - abbrevH - offsetBottom))
+    } else {
+        abbrevGui.Hide()
+        infoGui.Show("x0 y" (A_ScreenHeight - infoH - offsetBottom))
+    }
+}

@@ -1,6 +1,6 @@
 # Serv-Call-Manager
 #### Version
-[2.0]
+[2.1]
 
 ## УСТАНОВКА
 Нажать зеленую кнопку Code -> Download ZIP
