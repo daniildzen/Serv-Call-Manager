@@ -134,10 +134,14 @@ CreateAbbrevGUI() {
         [247, кругл]            Круглосуточно
         [не сущ]                Номер не существует
         
+        [#подтв]                Адрес верный
+        [#недозв]               Не дозвон
+        [#отмена]               Отмена заявки
+        
         [Ctrl+F9] ◀ Назад
     )"
     
-    guiObj.Add("Text", "w320 h210", text)
+    guiObj.Add("Text", "w320 h265", text)
     return guiObj
 }
 
@@ -194,10 +198,10 @@ class CallManager {
         SetTimer(() => ToolTip(), -2000)
     }
 
-    static CommentGenerator() {
+    static CommentGenerator(tWhait) {
         now := A_Now
-        time1 := DateAdd(now, 30, "Minutes")
-        time2 := DateAdd(now, 60, "Minutes")
+        time1 := DateAdd(now, tWhait, "Minutes")
+        time2 := DateAdd(now, tWhait*2, "Minutes")
         
         SendInput FormatTime(now, "dd.MM`n    HH:mm`n    ")
         SendInput FormatTime(time1, "HH:mm`n    ")
@@ -218,7 +222,7 @@ Initialize()
 ; Основные функции
 F6:: CallManager.NumberGenerator()
 F8:: CallManager.ABNumberGenerator()
-F7:: CallManager.CommentGenerator()
+F7:: CallManager.CommentGenerator(30)
 ^F7:: CallManager.SingleCommentGenerator()
 ^F6:: Run(resources("letter.msg"))
 
@@ -359,6 +363,28 @@ SendText("Номер не существует. Необходим доп. но�
 }
 ::yt ceo:: {
 SendText("Номер не существует. Необходим доп. номер.")
+}
+
+::#подтв:: {
+SendText("#подтв Адрес верный. График: с . т. . Связь через SIM-карту / Wi-Fi / кабель")
+}
+
+::#недозв:: {
+    SendText("#недозв")
+    CallManager.CommentGenerator(10)
+}
+
+::#недозвкратк:: {
+    SendText("#недозв")
+    CallManager.SingleCommentGenerator()
+}
+
+::#отмена:: {
+    SendText("#отмена Заявка не актуальна. ")
+}
+
+::бумага::{
+    SendText("По заявке на сервис требуется только доставки бумаги (терминал работает), отмена заявки, сервис не требуется. Доставку бумаги осуществит подрядчик – Генсервис.")
 }
 
 ; ==========================
